@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
 
 const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy) => {
     try {
-        const info = transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`, // sender address
             to: to, // list of receivers
             subject: `New Task Assigned: ${taskName}`, // Subject line
@@ -25,7 +25,7 @@ const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy) =
             `, // html body
         });
 
-        console.log('Mail sent');
+        console.log('Mail sent:', info.messageId);
         return info;
     } catch (error) {
         console.error('Error sending email:', error);

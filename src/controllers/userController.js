@@ -64,7 +64,7 @@ const createStaff = async (req, res) => {
         `;
 
             try {
-                await sendMail({
+                 sendMail({
                     email: user.email,
                     subject: 'Task Manager Account Created',
                     html: message,
