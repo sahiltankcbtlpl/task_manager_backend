@@ -22,7 +22,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+        origin: true, // Allow all origins (or specify your frontend URL)
         methods: ['GET', 'POST'],
         credentials: true
     }
@@ -41,7 +41,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: true, // Allow all origins (or specify your frontend URL)
     credentials: true
 }));
 
@@ -61,6 +61,7 @@ app.use('/api/permissions', permissionRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/taskStatus', require('./src/routes/taskStatusRoutes'));
 app.use('/api/tasks', require('./src/routes/taskRoutes'));
+app.use('/api/projects', require('./src/routes/projectRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

@@ -28,13 +28,23 @@ const createTask = async (req, res) => {
             assignee
         };
 
-        if (req.file) {
-            taskData.attachment = {
-                filename: req.file.filename,
-                path: req.file.path,
-                mimetype: req.file.mimetype,
-                size: req.file.size
-            };
+        if (req.files) {
+            if (req.files.attachments) {
+                taskData.attachments = req.files.attachments.map(file => ({
+                    filename: file.filename,
+                    path: file.path,
+                    mimetype: file.mimetype,
+                    size: file.size
+                }));
+            }
+            if (req.files.videoAttachments) {
+                taskData.videoAttachments = req.files.videoAttachments.map(file => ({
+                    filename: file.filename,
+                    path: file.path,
+                    mimetype: file.mimetype,
+                    size: file.size
+                }));
+            }
         }
 
         const task = await Task.create(taskData);
@@ -49,11 +59,19 @@ const createTask = async (req, res) => {
         // Send email notification to assignee
         if (assignee && populatedTask.assignee) {
             const assignedBy = req.user.name; // Assuming req.user is populated by auth middleware
+            
+            // Collect all attachments to send in the email
+            const emailAttachments = [
+                ...(populatedTask.attachments || []),
+                ...(populatedTask.videoAttachments || [])
+            ];
+            
             sendTaskAssignmentEmail(
                 populatedTask.assignee.email,
                 populatedTask.name,
                 populatedTask.assignee.name,
-                assignedBy
+                assignedBy,
+                emailAttachments
             );
         }
 
@@ -143,15 +161,48 @@ const updateTask = async (req, res) => {
             task.status = status || task.status;
             task.assignee = assignee || task.assignee;
 
-            if (req.file) {
-                task.attachment = {
-                    filename: req.file.filename,
-                    path: req.file.path,
-                    mimetype: req.file.mimetype,
-                    size: req.file.size
-                };
-            } else if (req.body.removeAttachment === 'true') {
-                task.attachment = undefined; // Or null, depending on your schema preference. Mongoose unsets with undefined often.
+            if (req.body.removedAttachments) {
+                try {
+                    const removedIds = JSON.parse(req.body.removedAttachments);
+                    task.attachments = task.attachments.filter(att => !removedIds.includes(att._id.toString()));
+                } catch (e) {
+                    console.error('Failed to parse removedAttachments', e);
+                }
+            }
+
+            if (req.body.removedVideoAttachments) {
+                try {
+                    const removedIds = JSON.parse(req.body.removedVideoAttachments);
+                    task.videoAttachments = task.videoAttachments.filter(att => !removedIds.includes(att._id.toString()));
+                } catch (e) {
+                    console.error('Failed to parse removedVideoAttachments', e);
+                }
+            }
+
+            if (req.files) {
+                if (req.files.attachments) {
+                    const newAtt = req.files.attachments.map(file => ({
+                        filename: file.filename,
+                        path: file.path,
+                        mimetype: file.mimetype,
+                        size: file.size
+                    }));
+                    task.attachments = [...(task.attachments || []), ...newAtt];
+                }
+                if (req.files.videoAttachments) {
+                    const newVid = req.files.videoAttachments.map(file => ({
+                        filename: file.filename,
+                        path: file.path,
+                        mimetype: file.mimetype,
+                        size: file.size
+                    }));
+                    task.videoAttachments = [...(task.videoAttachments || []), ...newVid];
+                }
+            }
+
+            // Legacy attachment removal support
+            if (req.body.removeLegacyAttachment === 'true') {
+                task.attachment = undefined;
             }
 
             const updatedTask = await task.save();
@@ -167,11 +218,19 @@ const updateTask = async (req, res) => {
             // Since this route is protected, we can assume authorized user.
             if (assignee && assignee !== oldAssignee?.toString() && populatedTask.assignee) {
                 const assignedBy = req.user.name;
+                
+                // Collect all attachments to send in the email
+                const emailAttachments = [
+                    ...(populatedTask.attachments || []),
+                    ...(populatedTask.videoAttachments || [])
+                ];
+
                 sendTaskAssignmentEmail(
                     populatedTask.assignee.email,
                     populatedTask.name,
                     populatedTask.assignee.name,
-                    assignedBy
+                    assignedBy,
+                    emailAttachments
                 );
             }
 

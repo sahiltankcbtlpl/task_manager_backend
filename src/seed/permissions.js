@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Permission = require('../models/Permission');
 require('dotenv').config();
 
-const modules = ['user', 'role', 'permission', 'task', 'staff', 'task_status']; // Add 'staff' and 'task' as they appear in user's UI/context
+const modules = ['user', 'role', 'permission', 'task', 'staff', 'task_status', 'project']; // Add 'staff', 'task', and 'project' as they appear in user's UI/context
 const actions = ['view', 'create', 'update', 'delete', 'manage']; // 'manage' fits 'All' or specific overrides? The UI has 'Manage'. 
 // Wait, the UI has columns: All, View, Create, Update, Delete, Manage. 
 // "All" is usually a UI helper. "Manage" might be a specific permission or just a catch-all.
@@ -26,7 +26,7 @@ const seedPermissions = async () => {
             actions.forEach(action => {
                 let formattedModule = module;
                 // Add pluralization for routes that expect it (user -> users, role -> roles, task -> tasks)
-                if (['user', 'role', 'task', 'permission'].includes(module)) {
+                if (['user', 'role', 'task', 'permission', 'project'].includes(module)) {
                     formattedModule = module + 's';
                 }
 

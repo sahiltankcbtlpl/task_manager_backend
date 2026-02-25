@@ -8,9 +8,9 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy) => {
+const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy, attachments = []) => {
     try {
-        const info = await transporter.sendMail({
+        const mailOptions = {
             from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`, // sender address
             to: to, // list of receivers
             subject: `New Task Assigned: ${taskName}`, // Subject line
@@ -23,7 +23,17 @@ const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy) =
                 <p>Best regards,</p>
                 <p>Task Manager Team</p>
             `, // html body
-        });
+        };
+
+        if (attachments && attachments.length > 0) {
+            // Nodemailer expects { filename, path } format for attachments
+            mailOptions.attachments = attachments.map(att => ({
+                filename: att.filename,
+                path: att.path
+            }));
+        }
+
+        const info = await transporter.sendMail(mailOptions);
 
         console.log('Mail sent:', info.messageId);
         return info;
@@ -33,6 +43,33 @@ const sendTaskAssignmentEmail = async (to, taskName, assigneeName, assignedBy) =
     }
 };
 
+const sendProjectAssignmentEmail = async (to, assigneeName, projectTitle, projectDescription) => {
+    try {
+        const mailOptions = {
+            from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`,
+            to: to,
+            subject: 'Assigned to New Project',
+            html: `
+                <h3>Hello ${assigneeName},</h3>
+                <p>You have been assigned to the project: <strong>${projectTitle}</strong></p>
+                <p>Description: ${projectDescription}</p>
+                <p>Please log in to the Task Manager to view more details.</p>
+                <br>
+                <p>Best regards,</p>
+                <p>Task Manager Team</p>
+            `,
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Project Mail sent:', info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Error sending project email:', error);
+        return null;
+    }
+};
+
 module.exports = {
     sendTaskAssignmentEmail,
+    sendProjectAssignmentEmail,
 };
