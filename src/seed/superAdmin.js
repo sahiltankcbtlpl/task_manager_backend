@@ -20,18 +20,6 @@ const seedSuperAdmin = async () => {
             console.log('Role created: Super Admin');
         }
 
-        // Staff
-        let staffRole = await Role.findOne({ name: 'Staff' });
-
-        if (!staffRole) {
-            staffRole = await Role.create({
-                name: 'Staff',
-                permissions: [], // Initialize with empty permissions
-                status: 'Active'
-            });
-            console.log('Role created: Staff');
-        }
-
         // 4. Seed Super Admin User
         const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
         const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;

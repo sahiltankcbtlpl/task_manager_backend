@@ -33,12 +33,20 @@ const createPermission = async (req, res) => {
     }
 };
 
+const { applySearch } = require('../utils/searchHelper');
+
 // @desc    Get all permissions
 // @route   GET /api/permissions
 // @access  Private (Super Admin)
 const getPermissions = async (req, res) => {
     try {
-        const permissions = await Permission.find({ status: { $ne: 'deleted' } });
+        const { search } = req.query;
+        let query = { status: { $ne: 'deleted' } };
+
+        // Apply search if search parameter is provided
+        query = applySearch(query, search, ['name', 'value']);
+
+        const permissions = await Permission.find(query);
         res.json(permissions);
     } catch (error) {
         res.status(500).json({ message: error.message });

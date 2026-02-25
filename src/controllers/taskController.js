@@ -63,6 +63,8 @@ const createTask = async (req, res) => {
     }
 };
 
+const { applySearch } = require('../utils/searchHelper');
+
 // @desc    Get all tasks
 // @route   GET /api/tasks
 // @access  Private (Manage Tasks/Read Tasks)
@@ -70,7 +72,7 @@ const getTasks = async (req, res) => {
     try {
         let query = {};
 
-        const { status, assignee } = req.query;
+        const { status, assignee, search } = req.query;
 
         // If not Super Admin, show only assigned tasks
         if (req.user.role.name !== 'Super Admin') {
@@ -83,6 +85,9 @@ const getTasks = async (req, res) => {
         if (status) {
             query.taskStatus = status;
         }
+
+        // Apply search if search parameter is provided
+        query = applySearch(query, search, ['name', 'description']);
 
         // console.log('getTasks query:', query); // DEBUG
         const tasks = await Task.find(query)

@@ -25,12 +25,20 @@ const createTaskStatus = async (req, res) => {
     }
 };
 
+const { applySearch } = require('../utils/searchHelper');
+
 // @desc    Get all task status
 // @route   GET /api/task-status
 // @access  Private (Manage Tasks)
 const getTaskstatus = async (req, res) => {
     try {
-        const status = await TaskStatus.find({ status: { $ne: 'deleted' } });
+        const { search } = req.query;
+        let query = { status: { $ne: 'deleted' } };
+
+        // Apply search if search parameter is provided
+        query = applySearch(query, search, ['name']);
+
+        const status = await TaskStatus.find(query);
         res.json(status);
     } catch (error) {
         res.status(500).json({ message: error.message });

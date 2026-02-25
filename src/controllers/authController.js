@@ -84,7 +84,6 @@ const updateMe = async (req, res) => {
             }
 
             const updatedUser = await user.save();
-            // Re-populate role for consistency in response
             await updatedUser.populate('role');
 
             res.status(200).json({

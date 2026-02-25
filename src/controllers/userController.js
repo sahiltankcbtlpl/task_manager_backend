@@ -11,36 +11,25 @@ const createStaff = async (req, res) => {
     try {
         const { name, email, phone, role } = req.body;
 
-        const userExists = await User.findOne({ email });
+        const [userExists, roleDoc] = await Promise.all([
+            User.findOne({ email }),
+            (!role || (typeof role === 'string' && !role.match(/^[0-9a-fA-F]{24}$/)))
+                ? Role.findOne({ name: role || 'Staff' })
+                : Role.findById(role)
+        ]);
 
         if (userExists) {
             res.status(400);
             throw new Error('User already exists');
         }
 
-        // Dynamic Role Assignment
-        let roleId = role;
-        let roleNameForEmail = role;
-
-        // If role is a name string or empty, lookup the Role ID
-        if (!role || (typeof role === 'string' && !role.match(/^[0-9a-fA-F]{24}$/))) {
-            const roleName = role || 'Staff';
-            const roleDoc = await Role.findOne({ name: roleName });
-            if (!roleDoc) {
-                res.status(400);
-                throw new Error(`Role '${roleName}' not found`);
-            }
-            roleId = roleDoc._id;
-            roleNameForEmail = roleDoc.name;
-        } else {
-            // Role is likely an ID, fetch the document to get the name
-            const roleDoc = await Role.findById(role);
-            if (!roleDoc) {
-                res.status(400);
-                throw new Error(`Role ID '${role}' not found`);
-            }
-            roleNameForEmail = roleDoc.name;
+        if (!roleDoc) {
+            res.status(400);
+            throw new Error(`Role not found`);
         }
+
+        const roleId = roleDoc._id;
+        const roleNameForEmail = roleDoc.name;
 
         const password = generatePassword();
 
@@ -64,7 +53,7 @@ const createStaff = async (req, res) => {
         `;
 
             try {
-                 sendMail({
+                sendMail({
                     email: user.email,
                     subject: 'Task Manager Account Created',
                     html: message,
@@ -90,17 +79,22 @@ const createStaff = async (req, res) => {
     }
 };
 
+const { applySearch } = require('../utils/searchHelper');
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private (Admin/Manager)
 const getUsers = async (req, res) => {
     try {
-        const { role } = req.query;
+        const { role, search } = req.query;
         let query = {};
 
         if (role) {
             query.role = role;
         }
+
+        // Apply search if search parameter is provided
+        query = applySearch(query, search, ['name', 'email']);
 
         const users = await User.find(query).populate('role', 'name');
         res.json(users);

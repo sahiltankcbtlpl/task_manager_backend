@@ -29,12 +29,20 @@ const createRole = async (req, res) => {
     }
 };
 
+const { applySearch } = require('../utils/searchHelper');
+
 // @desc    Get all roles
 // @route   GET /api/roles
 // @access  Private (Super Admin)
 const getRoles = async (req, res) => {
     try {
-        const roles = await Role.find({ status: { $ne: 'Deleted' } })
+        const { search } = req.query;
+        let query = { status: { $ne: 'Deleted' } };
+
+        // Apply search if search parameter is provided
+        query = applySearch(query, search, ['name']);
+
+        const roles = await Role.find(query)
             .populate('permissions', 'name');
         res.json(roles);
     } catch (error) {
