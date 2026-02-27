@@ -1,6 +1,6 @@
 const Task = require('../models/Task');
 const TaskStatus = require('../models/TaskStatus');
-const { sendTaskAssignmentEmail } = require('../services/email.service');
+const { sendTaskAssignmentEmail, sendMentionEmail } = require('../services/email.service');
 const User = require('../models/User'); // Import User model
 
 // @desc    Create a new task
@@ -8,7 +8,7 @@ const User = require('../models/User'); // Import User model
 // @access  Private (Manage Tasks)
 const createTask = async (req, res) => {
     try {
-        let { name, description, taskStatus, status, assignee } = req.body;
+        let { name, description, taskStatus, status, assignee, project, category } = req.body;
 
         // If no taskStatus provided, find the first active status
         if (!taskStatus) {
@@ -25,7 +25,9 @@ const createTask = async (req, res) => {
             description,
             taskStatus,
             status,
-            assignee
+            assignee,
+            project,
+            category
         };
 
         if (req.files) {
@@ -53,19 +55,40 @@ const createTask = async (req, res) => {
         const populatedTask = await task.populate([
             { path: 'taskStatus', select: 'name status' },
             { path: 'status', select: 'name value' }, // Permission
-            { path: 'assignee', select: 'name email' }
+            { path: 'assignee', select: 'name email' },
+            { path: 'project', select: 'title' },
+            { path: 'mentionedUsers', select: 'name email' }
         ]);
+
+        // Parse mentions and send emails asynchronously
+        if (description) {
+            const allUsers = await User.find({}).select('name email');
+            const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const mentionedUsersList = allUsers.filter(user => {
+                const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                return regex.test(description);
+            });
+
+            if (mentionedUsersList.length > 0) {
+                task.mentionedUsers = mentionedUsersList.map(u => u._id);
+                await task.save();
+
+                mentionedUsersList.forEach(user => {
+                    sendMentionEmail(user.email, user.name, populatedTask.name, populatedTask.description);
+                });
+            }
+        }
 
         // Send email notification to assignee
         if (assignee && populatedTask.assignee) {
             const assignedBy = req.user.name; // Assuming req.user is populated by auth middleware
-            
+
             // Collect all attachments to send in the email
             const emailAttachments = [
                 ...(populatedTask.attachments || []),
                 ...(populatedTask.videoAttachments || [])
             ];
-            
+
             sendTaskAssignmentEmail(
                 populatedTask.assignee.email,
                 populatedTask.name,
@@ -90,7 +113,7 @@ const getTasks = async (req, res) => {
     try {
         let query = {};
 
-        const { status, assignee, search } = req.query;
+        const { status, assignee, search, project, category } = req.query;
 
         // If not Super Admin, show only assigned tasks
         if (req.user.role.name !== 'Super Admin') {
@@ -100,9 +123,9 @@ const getTasks = async (req, res) => {
             query.assignee = assignee;
         }
 
-        if (status) {
-            query.taskStatus = status;
-        }
+        if (status) query.taskStatus = status;
+        if (project) query.project = project;
+        if (category) query.category = category;
 
         // Apply search if search parameter is provided
         query = applySearch(query, search, ['name', 'description']);
@@ -111,7 +134,9 @@ const getTasks = async (req, res) => {
         const tasks = await Task.find(query)
             .populate('taskStatus', 'name status')
             .populate('status', 'name value')
-            .populate('assignee', 'name email');
+            .populate('assignee', 'name email')
+            .populate('project', 'title')
+            .populate('mentionedUsers', 'name email');
 
         // console.log(`Found ${tasks.length} tasks for user ${req.user.name} (${req.user.role.name})`); // DEBUG
         if (tasks.length > 0) {
@@ -131,7 +156,9 @@ const getTaskById = async (req, res) => {
         const task = await Task.findById(req.params.id)
             .populate('taskStatus', 'name status')
             .populate('status', 'name value')
-            .populate('assignee', 'name email');
+            .populate('assignee', 'name email')
+            .populate('project', 'title')
+            .populate('mentionedUsers', 'name email');
 
         if (task) {
             res.json(task);
@@ -149,17 +176,20 @@ const getTaskById = async (req, res) => {
 // @access  Private (Manage Tasks)
 const updateTask = async (req, res) => {
     try {
-        const { name, description, taskStatus, status, assignee } = req.body;
+        const { name, description, taskStatus, status, assignee, project, category } = req.body;
         const task = await Task.findById(req.params.id);
 
         if (task) {
             const oldAssignee = task.assignee;
+            const oldDescription = task.description;
 
-            task.name = name || task.name;
-            task.description = description || task.description;
-            task.taskStatus = taskStatus || task.taskStatus;
-            task.status = status || task.status;
-            task.assignee = assignee || task.assignee;
+            task.name = name ?? task.name;
+            task.description = description ?? task.description;
+            task.taskStatus = taskStatus ?? task.taskStatus;
+            task.status = status ?? task.status;
+            task.assignee = assignee ?? task.assignee;
+            if (project) task.project = project;
+            if (category) task.category = category;
 
             if (req.body.removedAttachments) {
                 try {
@@ -206,10 +236,43 @@ const updateTask = async (req, res) => {
             }
 
             const updatedTask = await task.save();
+
+            // Send email to newly mentioned users in description
+            if (description && description !== oldDescription) {
+                const allUsers = await User.find({}).select('name email');
+                const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const mentionedUsersList = allUsers.filter(user => {
+                    const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                    return regex.test(description);
+                });
+
+                if (mentionedUsersList.length > 0) {
+                    updatedTask.mentionedUsers = mentionedUsersList.map(u => u._id);
+                    await updatedTask.save();
+
+                    const oldMentionedUsers = oldDescription
+                        ? allUsers.filter(user => {
+                            const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                            return regex.test(oldDescription);
+                        })
+                        : [];
+
+                    const oldMentionedUsernames = oldMentionedUsers.map(u => u.name);
+
+                    mentionedUsersList.forEach(user => {
+                        if (!oldMentionedUsernames.includes(user.name)) {
+                            sendMentionEmail(user.email, user.name, updatedTask.name, updatedTask.description);
+                        }
+                    });
+                }
+            }
+
             const populatedTask = await updatedTask.populate([
                 { path: 'taskStatus', select: 'name status' },
                 { path: 'status', select: 'name value' },
-                { path: 'assignee', select: 'name email' }
+                { path: 'assignee', select: 'name email' },
+                { path: 'project', select: 'title' },
+                { path: 'mentionedUsers', select: 'name email' }
             ]);
 
             // Send email if assignee changed and is not the same as before
@@ -218,7 +281,7 @@ const updateTask = async (req, res) => {
             // Since this route is protected, we can assume authorized user.
             if (assignee && assignee !== oldAssignee?.toString() && populatedTask.assignee) {
                 const assignedBy = req.user.name;
-                
+
                 // Collect all attachments to send in the email
                 const emailAttachments = [
                     ...(populatedTask.attachments || []),

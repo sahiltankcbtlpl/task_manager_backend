@@ -1,6 +1,6 @@
 const Project = require('../models/Project');
 const User = require('../models/User');
-const { sendProjectAssignmentEmail } = require('../services/email.service');
+const { sendProjectAssignmentEmail, sendMentionEmail } = require('../services/email.service');
 
 // @desc    Create project
 // @route   POST /api/projects
@@ -29,6 +29,22 @@ const createProject = async (req, res) => {
             });
         }
 
+        // Send email to mentioned users in description
+        if (description) {
+            const allUsers = await User.find({}).select('name email');
+            const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const mentionedUsers = allUsers.filter(user => {
+                const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                return regex.test(description);
+            });
+
+            if (mentionedUsers.length > 0) {
+                mentionedUsers.forEach(user => {
+                    sendMentionEmail(user.email, user.name, project.title, project.description);
+                });
+            }
+        }
+
         res.status(201).json(project);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -41,9 +57,32 @@ const createProject = async (req, res) => {
 const getProjects = async (req, res) => {
     try {
         let query = {};
+        const { search } = req.query;
 
+        // Base query for user access
         if (req.user.role.name !== 'Super Admin') {
             query.members = req.user._id;
+        }
+
+        // Search query logic
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+
+            // First find users that match the search term
+            const matchingUsers = await User.find({ name: searchRegex }).select('_id');
+            const matchingUserIds = matchingUsers.map(u => u._id);
+
+            // Construct an $or query for title, description, and members
+            const searchQuery = {
+                $or: [
+                    { title: searchRegex },
+                    { description: searchRegex },
+                    { members: { $in: matchingUserIds } }
+                ]
+            };
+
+            // Combine with the base access query using $and to satisfy both conditions
+            query = { $and: [query, searchQuery] };
         }
 
         const projects = await Project.find(query)
@@ -98,6 +137,7 @@ const updateProject = async (req, res) => {
         }
 
         const oldMembersStr = project.members.map(m => m.toString());
+        const oldDescription = project.description;
 
         project.title = title ?? project.title;
         project.description = description ?? project.description;
@@ -117,6 +157,33 @@ const updateProject = async (req, res) => {
                         updatedProject.title,
                         updatedProject.description || 'No description provided.'
                     );
+                });
+            }
+        }
+
+        // Send email to newly mentioned users in description
+        if (description && description !== oldDescription) {
+            const allUsers = await User.find({}).select('name email');
+            const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const mentionedUsers = allUsers.filter(user => {
+                const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                return regex.test(description);
+            });
+
+            if (mentionedUsers.length > 0) {
+                const oldMentionedUsers = oldDescription
+                    ? allUsers.filter(user => {
+                        const regex = new RegExp(`@${escapeRegex(user.name)}\\b`, 'i');
+                        return regex.test(oldDescription);
+                    })
+                    : [];
+
+                const oldMentionedUsernames = oldMentionedUsers.map(u => u.name);
+
+                mentionedUsers.forEach(user => {
+                    if (!oldMentionedUsernames.includes(user.name)) {
+                        sendMentionEmail(user.email, user.name, updatedProject.title, updatedProject.description);
+                    }
                 });
             }
         }

@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
+    project: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Project',
+        required: true,
+        index: true,
+    },
     name: {
         type: String,
         required: true,
@@ -11,25 +17,25 @@ const taskSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
+    mentionedUsers: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+        },
+    ],
     taskStatus: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'TaskStatus',
-        // required: true,
     },
     status: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Permission',
+        type: String,
+        enum: ['active', 'inactive', 'deleted'],
+        default: 'active'
     },
     assignee: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-    },
-    attachment: {
-        filename: String,
-        path: String,
-        mimetype: String,
-        size: Number
     },
     attachments: [{
         filename: String,
@@ -42,7 +48,12 @@ const taskSchema = new mongoose.Schema({
         path: String,
         mimetype: String,
         size: Number
-    }]
+    }],
+    category: {
+        type: String,
+        enum: ['TASK', 'ISSUE'],
+        default: 'TASK',
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Task', taskSchema);
