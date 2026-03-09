@@ -22,5 +22,6 @@ const projectSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
-
+projectSchema.index({ title: 1 });
+projectSchema.index({ members: 1 });
 module.exports = mongoose.model('Project', projectSchema);

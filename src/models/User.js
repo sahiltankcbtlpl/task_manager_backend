@@ -5,7 +5,6 @@ const userSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        index: true,
     },
     phone: {
         type: String,
@@ -27,6 +26,11 @@ const userSchema = new mongoose.Schema({
     },
 
 }, { timestamps: true });
+// Mention search: "find users whose name contains X"
+userSchema.index({ name: 1 });
+
+// Role-based access queries (e.g. find all staff, filter out admins)
+userSchema.index({ role: 1 });
 
 // Encrypt password using bcrypt
 userSchema.pre('save', async function () {

@@ -43,20 +43,30 @@ const createStaff = async (req, res) => {
 
         if (user) {
             // Send email with credentials
-            const message = `
-          <h1>Welcome to Task Manager</h1>
-          <p>Your account has been created.</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Password:</strong> ${password}</p>
-          <p><strong>Role:</strong> ${roleNameForEmail}</p>
-          <p>Please login and change your password.</p>
-        `;
+            const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+            const loginLink = `${baseUrl}/login`;
+
+            const generateEmailTemplate = require('../utils/emailTemplate');
+            const htmlMessage = generateEmailTemplate(
+                'Welcome to Task Manager',
+                `
+                    <h3>Welcome to Task Manager</h3>
+                    <p>Your account has been created successfully. Here are your login credentials:</p>
+                    <div class="highlight-box">
+                        <p style="margin: 0; margin-bottom: 8px;"><strong>Email:</strong> ${email}</p>
+                        <p style="margin: 0; margin-bottom: 8px;"><strong>Password:</strong> ${password}</p>
+                        <p style="margin: 0;"><strong>Role:</strong> ${roleNameForEmail}</p>
+                    </div>
+                    <p>Please login and change your password immediately.</p>
+                    <a href="${loginLink}" class="action-button" style="color: #ffffff;">Log In to Task Manager</a>
+                `
+            );
 
             try {
                 sendMail({
                     email: user.email,
                     subject: 'Task Manager Account Created',
-                    html: message,
+                    html: htmlMessage,
                 });
             } catch (error) {
                 console.error(`Email send failed: ${error.message}`);

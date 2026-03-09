@@ -62,6 +62,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/taskStatus', require('./src/routes/taskStatusRoutes'));
 app.use('/api/tasks', require('./src/routes/taskRoutes'));
 app.use('/api/projects', require('./src/routes/projectRoutes'));
+app.use('/api/documents', require('./src/routes/documentRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

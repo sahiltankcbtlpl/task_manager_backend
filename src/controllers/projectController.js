@@ -18,13 +18,17 @@ const createProject = async (req, res) => {
 
         // Send email to all assigned members
         if (members && members.length > 0) {
+            const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+            const loginLink = `${baseUrl}/login`;
+
             const assignedUsers = await User.find({ _id: { $in: members } });
             assignedUsers.forEach(user => {
                 sendProjectAssignmentEmail(
                     user.email,
                     user.name,
                     project.title,
-                    project.description || 'No description provided.'
+                    project.description || 'No description provided.',
+                    loginLink
                 );
             });
         }
@@ -39,8 +43,11 @@ const createProject = async (req, res) => {
             });
 
             if (mentionedUsers.length > 0) {
+                const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+                const loginLink = `${baseUrl}/login`;
+
                 mentionedUsers.forEach(user => {
-                    sendMentionEmail(user.email, user.name, project.title, project.description);
+                    sendMentionEmail(user.email, user.name, project.title, project.description, loginLink);
                 });
             }
         }
@@ -60,7 +67,9 @@ const getProjects = async (req, res) => {
         const { search } = req.query;
 
         // Base query for user access
-        if (req.user.role.name !== 'Super Admin') {
+        // Dynamic permission check: Super Admin or has 'projects-read' permission
+        const hasFullAccess = req.user.role.name === 'Super Admin' || (req.user.role.permissions && req.user.role.permissions.includes('projects-read'));
+        if (!hasFullAccess) {
             query.members = req.user._id;
         }
 
@@ -108,7 +117,8 @@ const getProjectById = async (req, res) => {
             return res.status(404).json({ message: 'Project not found' });
         }
 
-        if (req.user.role.name !== 'Super Admin') {
+        const hasFullAccess = req.user.role.name === 'Super Admin' || (req.user.role.permissions && req.user.role.permissions.includes('projects-read'));
+        if (!hasFullAccess) {
             const isMember = project.members.some(
                 (member) => member._id.toString() === req.user._id.toString()
             );
@@ -118,6 +128,36 @@ const getProjectById = async (req, res) => {
         }
 
         res.json(project);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get project members by ID
+// @route   GET /api/projects/:id/members
+// @access  Private
+const getProjectMembers = async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id)
+            .select('members')
+            .populate('members', 'name email role')
+            .lean();
+
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        const hasFullAccess = req.user.role.name === 'Super Admin' || (req.user.role.permissions && req.user.role.permissions.includes('projects-read'));
+        if (!hasFullAccess) {
+            const isMember = project.members.some(
+                (member) => member._id.toString() === req.user._id.toString()
+            );
+            if (!isMember) {
+                return res.status(403).json({ message: 'Not authorized to view this project members' });
+            }
+        }
+
+        res.json(project.members);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -149,13 +189,17 @@ const updateProject = async (req, res) => {
         if (members) {
             const newMembers = members.filter(m => !oldMembersStr.includes(m.toString()));
             if (newMembers.length > 0) {
+                const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+                const loginLink = `${baseUrl}/login`;
+
                 const newlyAssignedUsers = await User.find({ _id: { $in: newMembers } });
                 newlyAssignedUsers.forEach(user => {
                     sendProjectAssignmentEmail(
                         user.email,
                         user.name,
                         updatedProject.title,
-                        updatedProject.description || 'No description provided.'
+                        updatedProject.description || 'No description provided.',
+                        loginLink
                     );
                 });
             }
@@ -180,9 +224,12 @@ const updateProject = async (req, res) => {
 
                 const oldMentionedUsernames = oldMentionedUsers.map(u => u.name);
 
+                const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+                const loginLink = `${baseUrl}/login`;
+
                 mentionedUsers.forEach(user => {
                     if (!oldMentionedUsernames.includes(user.name)) {
-                        sendMentionEmail(user.email, user.name, updatedProject.title, updatedProject.description);
+                        sendMentionEmail(user.email, user.name, updatedProject.title, updatedProject.description, loginLink);
                     }
                 });
             }
@@ -215,6 +262,7 @@ module.exports = {
     createProject,
     getProjects,
     getProjectById,
+    getProjectMembers,
     updateProject,
     deleteProject,
 };

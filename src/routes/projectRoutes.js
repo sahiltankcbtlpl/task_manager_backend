@@ -5,6 +5,7 @@ const {
     createProject,
     getProjects,
     getProjectById,
+    getProjectMembers,
     updateProject,
     deleteProject,
 } = require('../controllers/projectController');
@@ -17,12 +18,16 @@ router.use(protect);
 router
     .route('/')
     .post(checkPermission('projects-create'), createProject)
-    .get(checkPermission('projects-read'), getProjects);
+    .get(getProjects);
 
 router
     .route('/:id')
-    .get(checkPermission('projects-read'), getProjectById)
+    .get(getProjectById)
     .put(checkPermission('projects-update'), updateProject)
     .delete(checkPermission('projects-delete'), deleteProject);
+
+router
+    .route('/:id/members')
+    .get(getProjectMembers);
 
 module.exports = router;
