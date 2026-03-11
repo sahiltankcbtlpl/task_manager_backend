@@ -17,7 +17,7 @@ router.use(protect);
 
 const excelUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.mimetype === 'application/vnd.ms-excel') {
             cb(null, true);

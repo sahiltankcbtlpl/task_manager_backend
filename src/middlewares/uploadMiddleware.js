@@ -22,12 +22,12 @@ const storage = multer.diskStorage({
 
 // Check file type
 function checkFileType(file, cb) {
-    // Allowed extensions
     const filetypes = /jpeg|jpg|png|pdf|doc|docx|mp4/;
-    // Check extension
+
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    // Check mime
-    const mimetype = filetypes.test(file.mimetype) ||
+
+    const mimetype =
+        filetypes.test(file.mimetype) ||
         file.mimetype === 'application/msword' ||
         file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
         file.mimetype === 'application/pdf' ||
@@ -43,7 +43,9 @@ function checkFileType(file, cb) {
 // Initialize upload
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+    limits: {
+        fileSize: 200 * 1024 * 1024 // ✅ 200MB
+    },
     fileFilter: function (req, file, cb) {
         checkFileType(file, cb);
     }

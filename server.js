@@ -37,17 +37,18 @@ io.on('connection', (socket) => {
 });
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 app.use(cookieParser());
 app.use(cors({
     origin: true, // Allow all origins (or specify your frontend URL)
     credentials: true
 }));
 
-// Serve uploaded files
+// Serve uploaded and static files
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
@@ -71,6 +72,7 @@ app.get('/', (req, res) => {
 
 // Error handling middleware (placeholder)
 app.use((err, req, res, next) => {
+    console.error(err); // 👈 add this
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
     res.status(statusCode);
     res.json({
