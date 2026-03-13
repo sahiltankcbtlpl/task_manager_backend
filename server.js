@@ -29,12 +29,15 @@ const io = new Server(server, {
 });
 
 io.on('connection', (socket) => {
-    // console.log('New client connected:', socket.id); // Valid connection log
+    console.log('New client connected:', socket.id); // Valid connection log
 
     socket.on('disconnect', () => {
-        // console.log('Client disconnected:', socket.id);
+        console.log('Client disconnected:', socket.id);
     });
 });
+
+// Make io accessible to routers/controllers
+app.set('io', io);
 
 // Middleware
 app.use(express.json({ limit: '200mb' }));
@@ -47,8 +50,14 @@ app.use(cors({
 
 // Serve uploaded and static files
 const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/public', express.static(path.join(__dirname, 'public')));
+const staticOptions = {
+    setHeaders: (res, path) => {
+        res.setHeader('Content-Disposition', 'inline');
+    }
+};
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), staticOptions));
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads'), staticOptions));
+app.use('/public', express.static(path.join(__dirname, 'public'), staticOptions));
 
 // Routes
 const authRoutes = require('./src/routes/authRoutes');

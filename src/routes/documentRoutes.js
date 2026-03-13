@@ -5,9 +5,10 @@ const {
     getDocuments,
     requestReview,
     respondToReview,
-    downloadDocument,
     updateDocument,
-    deleteDocument
+    deleteDocument,
+    autosaveDocument,
+    requestAccess
 } = require('../controllers/documentController');
 const { protect } = require('../middlewares/auth');
 const multer = require('multer');
@@ -31,11 +32,15 @@ router.route('/')
 router.route('/:id/request-review')
     .post(protect, requestReview);
 
+router.route('/:id/request-access')
+    .post(protect, requestAccess);
+
 router.route('/:id/respond-review')
     .put(protect, respondToReview);
 
-router.route('/:id/download')
-    .get(protect, downloadDocument);
+
+router.route('/:id/autosave')
+    .patch(protect, autosaveDocument);
 
 router.route('/:id')
     .put(protect, upload.single('file'), updateDocument)

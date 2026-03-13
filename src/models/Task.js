@@ -56,4 +56,8 @@ const taskSchema = new mongoose.Schema({
 }, { timestamps: true });
 taskSchema.index({ project: 1, category: 1 });
 taskSchema.index({ assignee: 1 });
+// Add compound index to optimize the default API query filtering and sorting
+taskSchema.index({ category: 1, createdAt: -1, _id: 1 });
+// Add case-insensitive collation index for extremely fast duplicate checks
+taskSchema.index({ name: 1, project: 1, category: 1 }, { collation: { locale: 'en', strength: 2 } });
 module.exports = mongoose.model('Task', taskSchema);
