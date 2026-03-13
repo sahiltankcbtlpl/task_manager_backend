@@ -26,10 +26,10 @@ const createTask = async (req, res) => {
 
         // Check for duplicate title
         const existingTask = await Task.findOne({
-            name: { $regex: new RegExp(`^${name}$`, 'i') },
+            name: name,
             project,
             category
-        });
+        }).collation({ locale: 'en', strength: 2 });
 
         if (existingTask) {
             res.status(400);
@@ -133,6 +133,9 @@ const createTask = async (req, res) => {
             );
         }
 
+        // Emit real-time event
+        req.app.get('io').emit('taskCreated', populatedTask);
+
         res.status(201).json(populatedTask);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -168,7 +171,8 @@ const getTasks = async (req, res) => {
         const pageParams = req.query.page ? parseInt(req.query.page) : null;
         const limitParams = req.query.limit ? parseInt(req.query.limit) : null;
 
-        let findQuery = Task.find(query).sort({ createdAt: -1 });
+        // Use secondary sort by _id to guarantee stable pagination for identical timestamps
+        let findQuery = Task.find(query).sort({ createdAt: -1, _id: 1 });
 
         if (pageParams && limitParams) {
             const skip = (pageParams - 1) * limitParams;
@@ -187,7 +191,8 @@ const getTasks = async (req, res) => {
                     select: 'name email role'
                 }
             })
-            .populate('mentionedUsers', 'name email');
+            .populate('mentionedUsers', 'name email')
+            .lean(); // Massive performance boost for read-only listing
 
         if (pageParams && limitParams) {
             const totalItems = await Task.countDocuments(query);
@@ -386,6 +391,9 @@ const updateTask = async (req, res) => {
                 );
             }
 
+            // Emit real-time event
+            req.app.get('io').emit('taskUpdated', populatedTask);
+
             res.json(populatedTask);
         } else {
             res.status(404);
@@ -405,6 +413,8 @@ const deleteTask = async (req, res) => {
 
         if (task) {
             await task.deleteOne();
+            // Emit real-time event
+            req.app.get('io').emit('taskDeleted', req.params.id);
             res.json({ message: 'Task removed' });
         } else {
             res.status(404);
@@ -434,7 +444,23 @@ const bulkUploadTasks = async (req, res) => {
         // 2️⃣ Parse Excel
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
-        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        const rawSheet = workbook.Sheets[sheetName];
+        
+        // Extract headers from the first row to validate the format
+        const headers = xlsx.utils.sheet_to_json(rawSheet, { header: 1 })[0] || [];
+        const requiredHeaders = ['Title', 'Name']; // Needs at least one of these
+        
+        const hasValidHeader = headers.some(header => 
+            typeof header === 'string' && requiredHeaders.includes(header.trim())
+        );
+
+        if (!hasValidHeader) {
+            return res.status(400).json({ 
+                message: 'Invalid Excel format. Please use the provided sample template.' 
+            });
+        }
+
+        const data = xlsx.utils.sheet_to_json(rawSheet);
 
         if (!data || data.length === 0) {
             return res.status(400).json({ message: 'No data found in the Excel file' });
@@ -574,46 +600,11 @@ const bulkUploadTasks = async (req, res) => {
             );
 
             insertedCount = bulkWriteResult.insertedCount;
+        }
 
-            const assignedBy = req.user.name;
-
-            const baseUrl = process.env.FRONTEND_URL
-                ? process.env.FRONTEND_URL.replace(/\/$/, '')
-                : 'http://localhost:3000';
-
-            const loginLink = `${baseUrl}/login`;
-
-            const userLookup = {};
-
-            users.forEach(u => {
-                userLookup[u._id.toString()] = {
-                    email: u.email,
-                    name: u.name
-                };
-            });
-
-            // Send emails only for small batches
-            if (validTasks.length <= 100) {
-
-                validTasks.forEach(task => {
-
-                    if (!task.assignee) return;
-
-                    const assigneeInfo = userLookup[task.assignee.toString()];
-
-                    if (assigneeInfo) {
-                        // sendTaskAssignmentEmail(
-                        //     assigneeInfo.email,
-                        //     task.name,
-                        //     assigneeInfo.name,
-                        //     assignedBy,
-                        //     [], // no attachments supported in bulk upload currently
-                        //     loginLink,
-                        //     task.category
-                        // );
-                    }
-                });
-            }
+        // Emit real-time event to refresh lists on the frontend
+        if (insertedCount > 0) {
+            req.app.get('io').emit('taskCreated');
         }
 
         // 🔟 Response
