@@ -24,7 +24,10 @@ const userSchema = new mongoose.Schema({
         ref: 'Role',
         required: true,
     },
-
+    autosavePreference: {
+        type: Boolean,
+        default: false,
+    },
 }, { timestamps: true });
 // Mention search: "find users whose name contains X"
 userSchema.index({ name: 1 });

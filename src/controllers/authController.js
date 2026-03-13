@@ -22,7 +22,8 @@ const loginUser = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role ? user.role.name : null,
-                permissions: user.role ? user.role.permissions : []
+                permissions: user.role ? user.role.permissions : [],
+                autosavePreference: user.autosavePreference
             });
         } else {
             res.status(401);
@@ -60,7 +61,8 @@ const getMe = async (req, res) => {
             email: user.email,
             phone: user.phone,
             role: user.role ? user.role.name : null,
-            permissions: user.role ? user.role.permissions : []
+            permissions: user.role ? user.role.permissions : [],
+            autosavePreference: user.autosavePreference
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -83,6 +85,10 @@ const updateMe = async (req, res) => {
                 user.password = req.body.password;
             }
 
+            if (req.body.autosavePreference !== undefined) {
+                user.autosavePreference = req.body.autosavePreference === 'true' || req.body.autosavePreference === true;
+            }
+
             const updatedUser = await user.save();
             await updatedUser.populate('role');
 
@@ -93,6 +99,7 @@ const updateMe = async (req, res) => {
                 phone: updatedUser.phone,
                 role: updatedUser.role ? updatedUser.role.name : null,
                 permissions: updatedUser.role ? updatedUser.role.permissions : [],
+                autosavePreference: updatedUser.autosavePreference,
                 message: 'Profile updated successfully'
             });
         } else {

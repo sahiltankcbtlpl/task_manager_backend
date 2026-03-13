@@ -35,6 +35,25 @@ const documentSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     }],
+    content: {
+        type: String,
+        default: ''
+    },
+    isEditorDocument: {
+        type: Boolean,
+        default: false
+    },
+    permissions: [{
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        access: {
+            type: String,
+            enum: ['view', 'edit'],
+            default: 'view'
+        }
+    }],
     reviewRequests: [{
         requestedBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -45,6 +64,11 @@ const documentSchema = new mongoose.Schema({
             type: String,
             enum: ['pending', 'accepted', 'declined'],
             default: 'pending',
+        },
+        requestType: {
+            type: String,
+            enum: ['view', 'edit'],
+            default: 'view',
         }
     }]
 }, { timestamps: true });
