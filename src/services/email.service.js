@@ -99,12 +99,13 @@ const sendMentionEmail = (to, assigneeName, projectName, projectDescription, log
         .catch(error => console.error('Error sending mention email:', error));
 };
 
-const sendReviewRequestMail = (ownerEmail, ownerName, documentName, requesterName, loginLink) => {
+const sendReviewRequestMail = (ownerEmail, ownerName, documentName, requesterName, loginLink, requestType = 'view') => {
+    const typeLabel = requestType === 'edit' ? 'Edit Access' : 'Review';
     const htmlContent = generateEmailTemplate(
-        `Review Request: ${documentName}`,
+        `${typeLabel} Request: ${documentName}`,
         `
             <h3>Hello ${ownerName},</h3>
-            <p><strong>${requesterName}</strong> has requested a review for the document: <strong>${documentName}</strong>.</p>
+            <p><strong>${requesterName}</strong> has requested <strong>${typeLabel.toLowerCase()}</strong> for the document: <strong>${documentName}</strong>.</p>
             <p>Please log in to accept or decline the request.</p>
             <a href="${loginLink}" class="action-button" style="color: #ffffff;">View Request</a>
         `
@@ -113,7 +114,7 @@ const sendReviewRequestMail = (ownerEmail, ownerName, documentName, requesterNam
     const mailOptions = {
         from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`,
         to: ownerEmail,
-        subject: `Review Request: ${documentName}`,
+        subject: `${typeLabel} Request: ${documentName}`,
         html: htmlContent,
     };
 
