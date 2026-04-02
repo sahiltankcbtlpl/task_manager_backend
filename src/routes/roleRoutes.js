@@ -14,12 +14,12 @@ const { checkPermission } = require('../middlewares/role');
 router.use(protect);
 
 router.route('/')
-    .post(checkPermission('roles-create'), createRole)
-    .get(checkPermission('roles-read'), getRoles);
+    .post(checkPermission('MANAGE_ROLES'), createRole)
+    .get(getRoles); // Any authenticated user can read roles (needed for role dropdowns)
 
 router.route('/:id')
-    .get(checkPermission('roles-read'), getRoleById)
-    .put(checkPermission('roles-update'), updateRole)
-    .delete(checkPermission('roles-delete'), deleteRole);
+    .get(getRoleById) // Any authenticated user can get a role by ID
+    .put(checkPermission('MANAGE_ROLES'), updateRole)
+    .delete(checkPermission('MANAGE_ROLES'), deleteRole);
 
 module.exports = router;

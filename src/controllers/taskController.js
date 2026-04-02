@@ -5,6 +5,7 @@ const Project = require('../models/Project');
 const xlsx = require('xlsx');
 const { sendTaskAssignmentEmail, sendMentionEmail } = require('../services/email.service');
 const User = require('../models/User'); // Import User model
+const Company = require('../models/Company');
 const { isUserProjectMember } = require('../utils/projectHelper');
 // @desc    Create a new task
 // @route   POST /api/tasks
@@ -18,7 +19,19 @@ const createTask = async (req, res) => {
             throw new Error('Project is required');
         }
 
-        const isMember = await isUserProjectMember(project, assignee);
+        const projectDoc = await Project.findById(project).select('company members');
+        if (!projectDoc) {
+            res.status(404);
+            throw new Error('Project not found');
+        }
+
+        // Verify project belongs to the current company
+        if (projectDoc.company.toString() !== req.companyId.toString()) {
+            res.status(403);
+            throw new Error('Project does not belong to this company');
+        }
+
+        const isMember = assignee ? projectDoc.members.some(id => id.toString() === assignee.toString()) : true;
         if (assignee && !isMember) {
             res.status(400);
             throw new Error('Assignee must be a member of the project');
@@ -47,12 +60,13 @@ const createTask = async (req, res) => {
         }
 
         const taskData = {
+            project,
+            company: req.companyId,
             name,
             description,
             taskStatus,
             status,
             assignee,
-            project,
             category
         };
 
@@ -149,19 +163,42 @@ const { applySearch } = require('../utils/searchHelper');
 // @access  Private (Manage Tasks/Read Tasks)
 const getTasks = async (req, res) => {
     try {
-        let query = {};
+        let query = { company: req.companyId };
 
         const { status, assignee, search, project, category } = req.query;
 
-        // If not Super Admin, show only assigned tasks
-        if (req.user.role.name !== 'Super Admin') {
+        // Permission based filtering
+        const isSuperAdmin = req.user.role?.name === 'Super Admin';
+        const isCompanyOwner = req.role === 'Company Owner';
+        const isCompanyAdmin = req.role === 'Admin'; // In case Admin exists later
+        const isCompanyManager = req.role === 'Project manager';
+
+        if (!isSuperAdmin && !isCompanyOwner && !isCompanyAdmin && !isCompanyManager) {
+            // Regular member: only see tasks assigned to them
             query.assignee = req.user._id;
         } else if (assignee) {
-            // Only Super Admin can filter by assignee
+            // Admins/Managers can filter by assignee
             query.assignee = assignee;
         }
 
-        if (status) query.taskStatus = status;
+        if (status) {
+            // If no project is selected, we want to find all tasks with the same status name
+            // across all projects in the company.
+            if (!project) {
+                const selectedStatus = await TaskStatus.findById(status);
+                if (selectedStatus) {
+                    const allSimilarStatuses = await TaskStatus.find({ 
+                        name: selectedStatus.name,
+                        status: { $ne: 'deleted' }
+                    });
+                    query.taskStatus = { $in: allSimilarStatuses.map(s => s._id) };
+                } else {
+                    query.taskStatus = status;
+                }
+            } else {
+                query.taskStatus = status;
+            }
+        }
         if (project) query.project = project;
         if (category) query.category = category;
 
@@ -218,7 +255,10 @@ const getTasks = async (req, res) => {
 // @access  Private (Manage Tasks/Read Tasks)
 const getTaskById = async (req, res) => {
     try {
-        const task = await Task.findById(req.params.id)
+        const task = await Task.findOne({
+            _id: req.params.id,
+            company: req.companyId
+        })
             .populate('taskStatus', 'name status')
             .populate('status', 'name value')
             .populate('assignee', 'name email')
@@ -242,7 +282,10 @@ const getTaskById = async (req, res) => {
 const updateTask = async (req, res) => {
     try {
         const { name, description, taskStatus, status, assignee, project, category } = req.body;
-        const task = await Task.findById(req.params.id);
+        const task = await Task.findOne({
+            _id: req.params.id,
+            company: req.companyId
+        });
 
         if (task) {
             const oldAssignee = task.assignee;
@@ -254,6 +297,15 @@ const updateTask = async (req, res) => {
             if (assignee && !isMember) {
                 res.status(400);
                 throw new Error('Assignee must be a member of the project');
+            }
+
+            // Verify new project belongs to the company
+            if (project) {
+                const projectDoc = await Project.findById(project).select('company');
+                if (projectDoc && projectDoc.company.toString() !== req.companyId.toString()) {
+                    res.status(403);
+                    throw new Error('Project does not belong to this company');
+                }
             }
 
             if (name && name.toLowerCase() !== task.name.toLowerCase()) {
@@ -409,7 +461,10 @@ const updateTask = async (req, res) => {
 // @access  Private (Manage Tasks)
 const deleteTask = async (req, res) => {
     try {
-        const task = await Task.findById(req.params.id);
+        const task = await Task.findOne({
+            _id: req.params.id,
+            company: req.companyId
+        });
 
         if (task) {
             await task.deleteOne();
@@ -441,59 +496,76 @@ const bulkUploadTasks = async (req, res) => {
             return res.status(400).json({ message: 'Project is required' });
         }
 
+        const projectIdObj = new mongoose.Types.ObjectId(project);
+
         // 2️⃣ Parse Excel
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const rawSheet = workbook.Sheets[sheetName];
-        
-        // Extract headers from the first row to validate the format
-        const headers = xlsx.utils.sheet_to_json(rawSheet, { header: 1 })[0] || [];
-        const requiredHeaders = ['Title', 'Name']; // Needs at least one of these
-        
-        const hasValidHeader = headers.some(header => 
-            typeof header === 'string' && requiredHeaders.includes(header.trim())
-        );
 
-        if (!hasValidHeader) {
-            return res.status(400).json({ 
-                message: 'Invalid Excel format. Please use the provided sample template.' 
-            });
-        }
-
-        const data = xlsx.utils.sheet_to_json(rawSheet);
-
-        if (!data || data.length === 0) {
+        const jsonData = xlsx.utils.sheet_to_json(rawSheet);
+        if (!jsonData || jsonData.length === 0) {
             return res.status(400).json({ message: 'No data found in the Excel file' });
         }
 
-        // 3️⃣ Fetch statuses once
-        const allStatuses = await TaskStatus.find({});
+        // Helper to find column name case-insensitively
+        const findColumn = (row, possibleNames) => {
+            const keys = Object.keys(row);
+            for (const name of possibleNames) {
+                const found = keys.find(k => k.trim().toLowerCase() === name.toLowerCase());
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const firstRow = jsonData[0];
+        const titleKey = findColumn(firstRow, ['Title', 'Name', 'Task Name', 'Issue Name']);
+        const descKey = findColumn(firstRow, ['Description', 'Task Description', 'Details']);
+        const emailKey = findColumn(firstRow, ['Assignee Email', 'Email', 'Assignee']);
+        const statusKey = findColumn(firstRow, ['Status', 'Task Status', 'State']);
+
+        if (!titleKey) {
+            return res.status(400).json({
+                message: 'Invalid Excel format. Could not find "Title" or "Name" column.'
+            });
+        }
+
+        // 3️⃣ Fetch statuses once for this project
+        const allStatuses = await TaskStatus.find({ project: projectIdObj });
         const statusMap = {};
         let pendingStatus = null;
-        let defaultStatus = null;
+        let firstActiveStatus = null;
 
         allStatuses.forEach(s => {
-            statusMap[s.name.toLowerCase()] = s._id;
+            const normalizedName = s.name.trim().toLowerCase();
+            statusMap[normalizedName] = s._id;
 
-            if (s.status === 'active' && !defaultStatus) {
-                defaultStatus = s;
+            if (s.status === 'active' && !firstActiveStatus) {
+                firstActiveStatus = s;
             }
 
-            if (/^pending$/i.test(s.name)) {
+            if (normalizedName === 'pending') {
                 pendingStatus = s;
             }
         });
 
-        if (!pendingStatus) pendingStatus = defaultStatus;
+        // Use first active as fallback if no "pending" exists
+        const fallbackStatus = pendingStatus || firstActiveStatus;
 
         // 4️⃣ Collect distinct emails
         const emails = [...new Set(
-            data
-                .map(row => row['Assignee Email']?.toLowerCase())
+            jsonData
+                .map(row => emailKey ? row[emailKey]?.toString()?.trim()?.toLowerCase() : null)
                 .filter(Boolean)
         )];
 
-        const users = await User.find({ email: { $in: emails } });
+        // Only find users that belong to this company
+        const company = await Company.findById(req.companyId);
+        const memberIds = company.members.map(m => m.user);
+        const users = await User.find({ 
+            email: { $in: emails },
+            _id: { $in: memberIds }
+        });
 
         const userMap = {};
         users.forEach(u => {
@@ -518,21 +590,17 @@ const bulkUploadTasks = async (req, res) => {
         // 7️⃣ Prepare arrays
         const validTasks = [];
         const errors = [];
-
         const MAX_ERRORS = 1000;
-
-        const projectIdObj = new mongoose.Types.ObjectId(project);
         const now = new Date();
 
         // 8️⃣ Process rows
-        for (let i = 0; i < data.length; i++) {
+        for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
 
-            const row = data[i];
-
-            const title = row['Title'] || row['Name'];
-            const description = row['Description'] || '';
-            const assigneeEmail = row['Assignee Email']?.toLowerCase();
-            const statusName = row['Status']?.trim()?.toLowerCase();
+            const title = titleKey ? row[titleKey]?.toString()?.trim() : null;
+            const description = descKey ? row[descKey]?.toString()?.trim() : '';
+            const assigneeEmail = emailKey ? row[emailKey]?.toString()?.trim()?.toLowerCase() : null;
+            const excelStatusName = statusKey ? row[statusKey]?.toString()?.trim()?.toLowerCase() : null;
 
             if (!title && !assigneeEmail) continue;
 
@@ -556,19 +624,19 @@ const bulkUploadTasks = async (req, res) => {
             }
 
             let assigneeId = null;
-
             if (assigneeEmail) {
                 const foundUser = userMap[assigneeEmail];
-
                 if (foundUser && projectMembersSet.has(foundUser.toString())) {
                     assigneeId = foundUser;
                 }
             }
 
-            let taskStatusId = pendingStatus?._id;
-
-            if (statusName && statusMap[statusName]) {
-                taskStatusId = statusMap[statusName];
+            let taskStatusId = fallbackStatus?._id;
+            if (excelStatusName && statusMap[excelStatusName]) {
+                taskStatusId = statusMap[excelStatusName];
+            } else if (pendingStatus) {
+                // If provided status not found, default to pending (as per user request)
+                taskStatusId = pendingStatus._id;
             }
 
             validTasks.push({
@@ -578,6 +646,7 @@ const bulkUploadTasks = async (req, res) => {
                 status: 'active',
                 assignee: assigneeId,
                 project: projectIdObj,
+                company: req.companyId,
                 category: category || 'TASK',
                 createdAt: now,
                 updatedAt: now,
@@ -594,12 +663,12 @@ const bulkUploadTasks = async (req, res) => {
         // 9️⃣ Insert tasks
         if (validTasks.length > 0) {
 
-            const bulkWriteResult = await Task.collection.insertMany(
+            const bulkWriteResult = await Task.insertMany(
                 validTasks,
                 { ordered: false }
             );
 
-            insertedCount = bulkWriteResult.insertedCount;
+            insertedCount = bulkWriteResult.length;
         }
 
         // Emit real-time event to refresh lists on the frontend

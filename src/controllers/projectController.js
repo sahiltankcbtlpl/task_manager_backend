@@ -1,5 +1,6 @@
 const Project = require('../models/Project');
 const User = require('../models/User');
+const TaskStatus = require('../models/TaskStatus');
 const { sendProjectAssignmentEmail, sendMentionEmail } = require('../services/email.service');
 
 // @desc    Create project
@@ -14,7 +15,17 @@ const createProject = async (req, res) => {
             description,
             members,
             createdBy: req.user._id,
+            company: req.companyId,
         });
+
+        // Seed default task statuses for the new project
+        const defaultStatusNames = ['pending', 'in progress', 'completed'];
+        const defaultStatuses = defaultStatusNames.map(name => ({
+            name,
+            project: project._id,
+            status: 'active'
+        }));
+        await TaskStatus.insertMany(defaultStatuses);
 
         // Send email to all assigned members
         if (members && members.length > 0) {
@@ -63,12 +74,16 @@ const createProject = async (req, res) => {
 // @access  Private
 const getProjects = async (req, res) => {
     try {
-        let query = {};
+        let query = { company: req.companyId };
         const { search } = req.query;
 
         // Base query for user access
         // Dynamic permission check: Super Admin or has 'projects-read' permission
-        const hasFullAccess = req.user.role.name === 'Super Admin' || (req.user.role.permissions && req.user.role.permissions.includes('projects-read'));
+        const roleName = req.user.role ? req.user.role.name : null;
+        const permissions = req.user.role ? req.user.role.permissions : [];
+        
+        const hasFullAccess = roleName === 'Super Admin' || (permissions && permissions.includes('projects-read'));
+        
         if (!hasFullAccess) {
             query.members = req.user._id;
         }
@@ -100,6 +115,7 @@ const getProjects = async (req, res) => {
 
         res.json(projects);
     } catch (error) {
+        console.error('Error in getProjects:', error);
         res.status(500).json({ message: error.message });
     }
 };

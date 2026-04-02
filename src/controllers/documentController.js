@@ -20,8 +20,13 @@ const createDocument = async (req, res) => {
             return res.status(400).json({ message: 'File is required' });
         }
 
+        const projectDoc = await Project.findById(project).select('company');
+        if (!projectDoc || projectDoc.company.toString() !== req.companyId.toString()) {
+            return res.status(403).json({ message: 'Not authorized for this project (company mismatch)' });
+        }
+
         const isMember = await isUserProjectMember(project, req.user._id);
-        if (!isMember && req.user.role.name !== 'Super Admin') {
+        if (!isMember && req.user.role.name !== 'Super Admin' && req.role !== 'Company Owner' && req.role !== 'Admin') {
             return res.status(403).json({ message: 'Not authorized for this project' });
         }
 
@@ -63,6 +68,7 @@ const createDocument = async (req, res) => {
 
         const documentData = {
             project,
+            company: req.companyId,
             name,
             description,
             owner: req.user._id,
@@ -123,17 +129,11 @@ const getDocuments = async (req, res) => {
             ];
         }
 
+        // 1. Get company documents directly
+        query.company = req.companyId;
+
         if (project) {
-            // Check if user is a member of the project or Super Admin
-            const isMember = await isUserProjectMember(project, req.user._id);
-            if (!isMember && req.user.role.name !== 'Super Admin') {
-                return res.status(403).json({ message: 'Not authorized for this project' });
-            }
             query.project = project;
-        } else if (req.user.role.name !== 'Super Admin') {
-            const userProjects = await Project.find({ members: req.user._id }).select('_id');
-            const projectIds = userProjects.map(p => p._id);
-            query.project = { $in: projectIds };
         }
 
         const pageNum = parseInt(page, 10);
@@ -217,9 +217,9 @@ const requestReview = async (req, res) => {
         }
 
         // Check if a pending request of the SAME type already exists
-        const pendingRequest = docCheck.reviewRequests.find(r => 
-            r.requestedBy.toString() === userId.toString() && 
-            r.requestType === requestType && 
+        const pendingRequest = docCheck.reviewRequests.find(r =>
+            r.requestedBy.toString() === userId.toString() &&
+            r.requestType === requestType &&
             r.status === 'pending'
         );
 
@@ -306,7 +306,7 @@ const respondToReview = async (req, res) => {
             if (!document.allowedUsers.includes(reviewRequest.requestedBy._id)) {
                 document.allowedUsers.push(reviewRequest.requestedBy._id);
             }
-            
+
             // For rich text documents, also add to granular permissions if not present
             if (document.isEditorDocument) {
                 const existingPerm = document.permissions?.find(p => p.user.toString() === reviewRequest.requestedBy._id.toString());
@@ -369,16 +369,16 @@ const updateDocument = async (req, res) => {
         if (permissions) {
             try {
                 document.permissions = typeof permissions === 'string' ? JSON.parse(permissions) : permissions;
-                
+
                 // Keep allowedUsers in sync with permissions for rich text documents
                 if (document.isEditorDocument) {
                     const permissionUserIds = document.permissions.map(p => p.user.toString());
                     // Only keep users who have a record in permissions or are the owner
-                    document.allowedUsers = document.allowedUsers.filter(userId => 
-                        permissionUserIds.includes(userId.toString()) || 
+                    document.allowedUsers = document.allowedUsers.filter(userId =>
+                        permissionUserIds.includes(userId.toString()) ||
                         userId.toString() === document.owner.toString()
                     );
-                    
+
                     // Also ensure all users in permissions are in allowedUsers
                     permissionUserIds.forEach(uid => {
                         if (!document.allowedUsers.map(id => id.toString()).includes(uid)) {
@@ -437,15 +437,15 @@ const updateDocument = async (req, res) => {
         ]);
 
         // Identify newly added users to send emails
-        const newAllowedUsers = populatedDoc.allowedUsers.filter(user => 
-            !oldAllowedUserIds.includes(user._id.toString()) && 
+        const newAllowedUsers = populatedDoc.allowedUsers.filter(user =>
+            !oldAllowedUserIds.includes(user._id.toString()) &&
             user._id.toString() !== req.user._id.toString()
         );
 
         if (newAllowedUsers.length > 0) {
             const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
             const docLink = `${baseUrl}/documents?project=${populatedDoc.project._id || populatedDoc.project}&sharedDoc=${populatedDoc._id}`;
-            
+
             newAllowedUsers.forEach(user => {
                 sendDocumentSharedMail(
                     user.email,
@@ -506,7 +506,7 @@ const autosaveDocument = async (req, res) => {
 
         const isOwner = document.owner.toString() === req.user._id.toString();
         const hasEditPermission = document.permissions?.some(p => p.user.toString() === req.user._id.toString() && p.access === 'edit');
-        
+
         if (!isOwner && !hasEditPermission && req.user.role.name !== 'Super Admin') {
             return res.status(403).json({ message: 'No edit permission' });
         }
@@ -525,11 +525,11 @@ const autosaveDocument = async (req, res) => {
         // Sync allowedUsers with permissions for rich text documents during autosave
         if (document.isEditorDocument && document.permissions) {
             const permissionUserIds = document.permissions.map(p => p.user.toString());
-            document.allowedUsers = document.allowedUsers.filter(userId => 
-                permissionUserIds.includes(userId.toString()) || 
+            document.allowedUsers = document.allowedUsers.filter(userId =>
+                permissionUserIds.includes(userId.toString()) ||
                 userId.toString() === document.owner.toString()
             );
-            
+
             permissionUserIds.forEach(uid => {
                 if (!document.allowedUsers.map(id => id.toString()).includes(uid)) {
                     document.allowedUsers.push(uid);

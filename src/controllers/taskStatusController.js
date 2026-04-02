@@ -5,22 +5,35 @@ const TaskStatus = require('../models/TaskStatus');
 // @access  Private (Manage Tasks)
 const createTaskStatus = async (req, res) => {
     try {
-        const { name, status } = req.body;
+        const { name, status, project } = req.body;
 
-        const statusExists = await TaskStatus.findOne({ name });
+        if (!project) {
+            res.status(400);
+            throw new Error('Project ID is required');
+        }
+
+        const statusExists = await TaskStatus.findOne({ 
+            name, 
+            project,
+            status: { $ne: 'deleted' }
+        });
 
         if (statusExists) {
             res.status(400);
-            throw new Error('Task status with this name already exists');
+            throw new Error('Task status with this name already exists in this project');
         }
 
         const taskStatus = await TaskStatus.create({
             name,
+            project,
             status
         });
 
         res.status(201).json(taskStatus);
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ message: 'Task status with this name already exists in this project' });
+        }
         res.status(400).json({ message: error.message });
     }
 };
@@ -32,14 +45,20 @@ const { applySearch } = require('../utils/searchHelper');
 // @access  Private (Manage Tasks)
 const getTaskstatus = async (req, res) => {
     try {
-        const { search } = req.query;
-        let query = { status: { $ne: 'deleted' } };
+        const { search, project } = req.query;
+        let query = { 
+            status: { $ne: 'deleted' }
+        };
+
+        if (project) {
+            query.project = project;
+        }
 
         // Apply search if search parameter is provided
         query = applySearch(query, search, ['name']);
 
-        const status = await TaskStatus.find(query);
-        res.json(status);
+        const statuses = await TaskStatus.find(query);
+        res.json(statuses);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -50,7 +69,9 @@ const getTaskstatus = async (req, res) => {
 // @access  Private (Manage Tasks)
 const getTaskStatusById = async (req, res) => {
     try {
-        const taskStatus = await TaskStatus.findById(req.params.id);
+        const taskStatus = await TaskStatus.findOne({
+            _id: req.params.id
+        });
 
         if (taskStatus) {
             res.json(taskStatus);
@@ -69,7 +90,9 @@ const getTaskStatusById = async (req, res) => {
 const updateTaskStatus = async (req, res) => {
     try {
         const { name, status } = req.body;
-        const taskStatus = await TaskStatus.findById(req.params.id);
+        const taskStatus = await TaskStatus.findOne({
+            _id: req.params.id
+        });
 
         if (taskStatus) {
             if (name) taskStatus.name = name;
@@ -82,6 +105,9 @@ const updateTaskStatus = async (req, res) => {
             throw new Error('Task status not found');
         }
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ message: 'Task status with this name already exists in this project' });
+        }
         res.status(400).json({ message: error.message });
     }
 };
@@ -91,7 +117,9 @@ const updateTaskStatus = async (req, res) => {
 // @access  Private (Manage Tasks)
 const deleteTaskStatus = async (req, res) => {
     try {
-        const taskStatus = await TaskStatus.findById(req.params.id);
+        const taskStatus = await TaskStatus.findOne({
+            _id: req.params.id
+        });
 
         if (taskStatus) {
             taskStatus.status = 'deleted';
@@ -102,6 +130,9 @@ const deleteTaskStatus = async (req, res) => {
             throw new Error('Task status not found');
         }
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ message: 'Task status with this name already exists in this project' });
+        }
         res.status(400).json({ message: error.message });
     }
 };

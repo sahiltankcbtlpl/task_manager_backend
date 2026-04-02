@@ -39,11 +39,15 @@ const getRoles = async (req, res) => {
         const { search } = req.query;
         let query = { status: { $ne: 'Deleted' } };
 
+        // Filter out 'Super Admin' and 'Company Owner' for 'Company Owner' users
+        if (req.user && req.user.role && req.user.role.name === 'Company Owner') {
+            query.name = { $nin: ['Super Admin', 'Company Owner'] };
+        }
+
         // Apply search if search parameter is provided
         query = applySearch(query, search, ['name']);
 
-        const roles = await Role.find(query)
-            .populate('permissions', 'name');
+        const roles = await Role.find(query);
         res.json(roles);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -55,8 +59,7 @@ const getRoles = async (req, res) => {
 // @access  Private (Super Admin)
 const getRoleById = async (req, res) => {
     try {
-        const role = await Role.findById(req.params.id)
-            .populate('permissions', 'name');
+        const role = await Role.findById(req.params.id);
 
         if (role) {
             res.json(role);
@@ -83,11 +86,9 @@ const updateRole = async (req, res) => {
             role.status = status || role.status;
 
             const updatedRole = await role.save();
-            const populatedRole = await updatedRole.populate('permissions', 'name');
-
             res.json({
                 message: 'Role updated',
-                role: populatedRole
+                role: updatedRole
             });
         } else {
             res.status(404);

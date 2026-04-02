@@ -9,8 +9,10 @@ const {
 } = require('../controllers/userController');
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
+const { checkCompanyAccess } = require('../middlewares/companyAuth');
 
 router.use(protect);
+router.use(checkCompanyAccess);
 
 router.route('/')
     .post(checkPermission('users-create'), createStaff)

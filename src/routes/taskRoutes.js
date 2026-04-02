@@ -11,9 +11,11 @@ const {
 } = require('../controllers/taskController');
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
-const upload = require('../middlewares/uploadMiddleware');
+const { checkCompanyAccess } = require('../middlewares/companyAuth');
+const { uploadTask } = require('../middlewares/uploadMiddleware');
 
 router.use(protect);
+router.use(checkCompanyAccess);
 
 const excelUpload = multer({
     storage: multer.memoryStorage(),
@@ -27,7 +29,7 @@ const excelUpload = multer({
     }
 });
 
-const uploadFields = upload.fields([
+const uploadFields = uploadTask.fields([
     { name: 'attachments', maxCount: 10 },
     { name: 'videoAttachments', maxCount: 5 }
 ]);

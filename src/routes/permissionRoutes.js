@@ -20,7 +20,7 @@ router.use(protect);
 
 router.route('/')
     .post(checkPermission('permissions-create'), createPermission)
-    .get(checkPermission('permissions-read'), getPermissions);
+    .get(getPermissions); // Any authenticated user can read permissions (needed by RoleForm)
 
 router.route('/:id')
     .put(checkPermission('permissions-update'), updatePermission)

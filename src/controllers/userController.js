@@ -1,5 +1,6 @@
 const User = require('../models/User');
-const Role = require('../models/Role'); // Import Role model
+const Role = require('../models/Role');
+const Company = require('../models/Company');
 const generatePassword = require('../utils/generatePassword');
 const sendMail = require('../utils/sendMail');
 const ROLES = require('../config/roles');
@@ -32,14 +33,42 @@ const createStaff = async (req, res) => {
         const roleNameForEmail = roleDoc.name;
 
         const password = generatePassword();
+        let user;
+        let userCreated = false;
 
-        const user = await User.create({
-            name,
-            email,
-            phone,
-            password, // Will be hashed by pre-save hook
+        if (!userExists) {
+            user = await User.create({
+                name,
+                email,
+                phone,
+                password, // Will be hashed by pre-save hook
+                role: roleId
+            });
+            userCreated = true;
+        } else {
+            user = userExists;
+        }
+
+        // Add user to company members
+        const company = await Company.findById(req.companyId);
+
+        if (!company) {
+            res.status(404);
+            throw new Error('Company not found');
+        }
+
+        const isMember = company.members.find(m => m.user.toString() === user._id.toString());
+
+        if (isMember) {
+            res.status(400);
+            throw new Error('User is already a member of this company');
+        }
+
+        company.members.push({
+            user: user._id,
             role: roleId
         });
+        await company.save();
 
         if (user) {
             // Send email with credentials
@@ -99,6 +128,18 @@ const getUsers = async (req, res) => {
         const { role, search } = req.query;
         let query = {};
 
+        // Filter users by company membership
+        const company = await Company.findById(req.companyId).populate('members.user').populate('members.role');
+
+        if (!company) {
+            res.status(404);
+            throw new Error('Company not found');
+        }
+
+        const memberIds = company.members.map(m => m.user._id);
+
+        query._id = { $in: memberIds };
+
         if (role) {
             query.role = role;
         }
@@ -107,7 +148,16 @@ const getUsers = async (req, res) => {
         query = applySearch(query, search, ['name', 'email']);
 
         const users = await User.find(query).populate('role', 'name');
-        res.json(users);
+
+        const usersWithCompanyRole = users.map(u => {
+            const memberInfo = company.members.find(m => m.user._id.toString() === u._id.toString());
+            return {
+                ...u.toObject(),
+                companyRole: memberInfo && memberInfo.role ? memberInfo.role.name : null
+            };
+        });
+
+        res.json(usersWithCompanyRole);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

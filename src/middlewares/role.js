@@ -15,6 +15,12 @@ const checkPermission = (requiredPermission) => {
             return next();
         }
 
+        // 3️⃣ MANAGE_ROLES bypass — users with this permission can manage roles/permissions
+        const rolePermissionsEarly = req.user.role.permissions;
+        if (Array.isArray(rolePermissionsEarly) && rolePermissionsEarly.includes('MANAGE_ROLES')) {
+            return next();
+        }
+
         // 3️⃣ Permissions array check
         // console.log(req.user.role.permissions);
         const rolePermissions = req.user.role.permissions;

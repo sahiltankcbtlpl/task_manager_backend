@@ -10,7 +10,9 @@ const {
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
 
+const { checkCompanyAccess } = require('../middlewares/companyAuth');
 router.use(protect);
+router.use(checkCompanyAccess);
 
 router.route('/')
     .post(checkPermission('task_status-create'), createTaskStatus)
