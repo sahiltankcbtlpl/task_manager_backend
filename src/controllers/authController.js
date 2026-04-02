@@ -20,9 +20,9 @@ const loginUser = async (req, res) => {
 
             let userCompanies;
             if (user.role && user.role.name === 'Super Admin') {
-                userCompanies = await Company.find({}).select('name _id');
+                userCompanies = await Company.find({}).select('name _id logo');
             } else {
-                userCompanies = await Company.find({ 'members.user': user._id }).select('name _id');
+                userCompanies = await Company.find({ 'members.user': user._id }).select('name _id logo');
             }
 
             res.status(200).json({
@@ -67,9 +67,9 @@ const getMe = async (req, res) => {
 
         let userCompanies;
         if (user.role && user.role.name === 'Super Admin') {
-            userCompanies = await Company.find({}).select('name _id');
+            userCompanies = await Company.find({}).select('name _id logo');
         } else {
-            userCompanies = await Company.find({ 'members.user': user._id }).select('name _id');
+            userCompanies = await Company.find({ 'members.user': user._id }).select('name _id logo');
         }
 
         res.status(200).json({
@@ -239,7 +239,7 @@ const registerUser = async (req, res) => {
 
         generateToken(res, user._id);
 
-        const userCompanies = await Company.find({ 'members.user': user._id }).select('name _id');
+        const userCompanies = await Company.find({ 'members.user': user._id }).select('name _id logo');
 
         res.status(201).json({
             message: 'Registration Successful',

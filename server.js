@@ -45,7 +45,9 @@ app.use(express.urlencoded({ limit: '200mb', extended: true }));
 app.use(cookieParser());
 app.use(cors({
     origin: true, // Allow all origins (or specify your frontend URL)
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tunnel-Skip-AntiPhish', 'x-company-id']
 }));
 
 // Serve uploaded and static files
@@ -53,6 +55,9 @@ const path = require('path');
 const staticOptions = {
     setHeaders: (res, path) => {
         res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'X-Tunnel-Skip-AntiPhish');
     }
 };
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), staticOptions));
