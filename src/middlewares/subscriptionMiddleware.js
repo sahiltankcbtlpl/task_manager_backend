@@ -50,7 +50,9 @@ const checkSubscriptionLimit = (moduleName) => {
             const feature = subscription.features.find(f => {
                 const m = f.module.toLowerCase();
                 const target = activeModule.toLowerCase();
-                return m === target || (target === 'documents' && m === 'document create');
+                return m === target || 
+                       (target === 'documents' && (m === 'document create' || m === 'document')) ||
+                       (target === 'bulk upload' && (m === 'bulk_upload' || m === 'bulk-upload'));
             });
             
             if (!feature) {
