@@ -6,17 +6,22 @@ const Role = require('../models/Role');
 const createRole = async (req, res) => {
     try {
         const { name, permissions, status } = req.body;
+        const companyId = req.companyId;
 
-        const roleExists = await Role.findOne({ name });
+        if (!companyId) {
+            return res.status(400).json({ message: 'Company ID is required' });
+        }
+
+        const roleExists = await Role.findOne({ name, company: companyId });
 
         if (roleExists) {
-            res.status(400);
-            throw new Error('Role already exists');
+            return res.status(400).json({ message: 'Role already exists for this company' });
         }
 
         const role = await Role.create({
             name,
             permissions,
+            company: companyId,
             status: status || 'Active',
         });
 
@@ -37,7 +42,16 @@ const { applySearch } = require('../utils/searchHelper');
 const getRoles = async (req, res) => {
     try {
         const { search } = req.query;
-        let query = { status: { $ne: 'Deleted' } };
+        const companyId = req.companyId;
+
+        // Fetch roles that are system-wide (null) or specific to this company
+        let query = { 
+            status: { $ne: 'Deleted' },
+            $or: [
+                { company: companyId },
+                { company: null }
+            ]
+        };
 
         // Filter out 'Super Admin' and 'Company Owner' for 'Company Owner' users
         if (req.user && req.user.role && req.user.role.name === 'Company Owner') {

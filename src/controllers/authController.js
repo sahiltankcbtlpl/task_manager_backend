@@ -229,7 +229,7 @@ const registerUser = async (req, res) => {
             name: companyName,
             email: companyEmail,
             address: companyAddress,
-            gstNo: gstNo && gstNo.trim() ? gstNo.trim() : null,
+            gstNo: gstNo && gstNo.trim() ? gstNo.trim() : undefined,
             owner: user._id,
             members: [{
                 user: user._id,

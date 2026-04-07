@@ -508,6 +508,39 @@ const bulkUploadTasks = async (req, res) => {
             return res.status(400).json({ message: 'No data found in the Excel file' });
         }
 
+        // 2.1 Enforce per-upload record limit from subscription
+        const uploadLimit = req.bulkUploadLimit;
+        if (uploadLimit !== undefined && uploadLimit !== -1 && jsonData.length > uploadLimit) {
+            return res.status(403).json({ 
+                message: `Your current plan allows a maximum of ${uploadLimit} records per bulk upload. Your file contains ${jsonData.length} records. Please reduce the record count or upgrade your plan.` 
+            });
+        }
+
+        // 2.2 Enforce global Tasks/Issues limit from subscription
+        const companyData = await Company.findById(req.companyId).populate('subscription');
+        if (companyData && companyData.subscription) {
+            const activeModule = (category || 'TASK') === 'ISSUE' ? 'Issues' : 'Tasks';
+            const feature = companyData.subscription.features.find(f => f.module.toLowerCase() === activeModule.toLowerCase());
+            
+            if (feature && feature.limit !== -1) {
+                const currentCount = await Task.countDocuments({ 
+                    company: req.companyId, 
+                    category: category || 'TASK',
+                    status: { $ne: 'deleted' } 
+                });
+
+                if (currentCount + jsonData.length > feature.limit) {
+                    return res.status(403).json({
+                        message: `Bulk upload failed. Adding ${jsonData.length} records would exceed your plan's total limit of ${feature.limit} ${activeModule}. Current usage: ${currentCount}.`,
+                        limitReached: true,
+                        module: activeModule,
+                        current: currentCount,
+                        limit: feature.limit
+                    });
+                }
+            }
+        }
+
         // Helper to find column name case-insensitively
         const findColumn = (row, possibleNames) => {
             const keys = Object.keys(row);

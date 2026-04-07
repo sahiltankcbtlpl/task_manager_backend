@@ -14,13 +14,14 @@ const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
 const { uploadDocument } = require('../middlewares/uploadMiddleware');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
 
 router.use(protect);
 router.use(checkCompanyAccess);
 
 router.route('/')
     .get(getDocuments)
-    .post(uploadDocument.single('file'), createDocument);
+    .post(checkPermission('documents-create'), checkSubscriptionLimit('Documents'), uploadDocument.single('file'), createDocument);
 
 router.route('/:id/request-review')
     .post(requestReview);

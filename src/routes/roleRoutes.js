@@ -9,12 +9,15 @@ const {
 } = require('../controllers/roleController');
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
+const { checkCompanyAccess } = require('../middlewares/companyAuth');
 
 // All routes require login
 router.use(protect);
+router.use(checkCompanyAccess);
 
 router.route('/')
-    .post(checkPermission('MANAGE_ROLES'), createRole)
+    .post(checkPermission('MANAGE_ROLES'), checkSubscriptionLimit('Roles'), createRole)
     .get(getRoles); // Any authenticated user can read roles (needed for role dropdowns)
 
 router.route('/:id')

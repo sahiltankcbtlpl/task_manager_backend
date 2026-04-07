@@ -23,7 +23,6 @@ const companySchema = new mongoose.Schema({
         trim: true,
         unique: true,
         sparse: true, // allows multiple companies to have no GST number
-        default: null,
     },
     phone: {
         type: String,
@@ -76,6 +75,20 @@ const companySchema = new mongoose.Schema({
             },
         },
     ],
+    subscription: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subscription',
+        default: null,
+    },
+    subscriptionExpiresAt: {
+        type: Date,
+        default: null,
+    },
+    subscriptionStatus: {
+        type: String,
+        enum: ['Active', 'Expired', 'Trial', 'None'],
+        default: 'None',
+    },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Company', companySchema);

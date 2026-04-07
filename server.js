@@ -80,6 +80,10 @@ app.use('/api/projects', require('./src/routes/projectRoutes'));
 app.use('/api/documents', require('./src/routes/documentRoutes'));
 app.use('/api/documentPages', require('./src/routes/documentPageRoutes'));
 app.use('/api/companies', require('./src/routes/companyRoutes'));
+app.use('/api/subscriptions', require('./src/routes/subscriptionRoutes'));
+app.use('/api/modules', require('./src/routes/moduleRoutes'));
+
+
 
 // Basic route
 app.get('/', (req, res) => {

@@ -10,12 +10,13 @@ const {
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
 
 router.use(protect);
 router.use(checkCompanyAccess);
 
 router.route('/')
-    .post(checkPermission('users-create'), createStaff)
+    .post(checkPermission('users-create'), checkSubscriptionLimit('Users'), createStaff)
     .get(checkPermission('users-read'), getUsers);
 
 router.route('/:id')

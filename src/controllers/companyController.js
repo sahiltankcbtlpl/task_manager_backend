@@ -1,5 +1,6 @@
 const Company = require('../models/Company');
 const User = require('../models/User');
+const Subscription = require('../models/Subscription');
 
 // @desc    Get all companies
 // @route   GET /api/companies
@@ -7,7 +8,8 @@ const User = require('../models/User');
 const getCompanies = async (req, res) => {
     try {
         const companies = await Company.find({ status: { $ne: 'Deleted' } })
-            .populate('owner', 'name email phone');
+            .populate('owner', 'name email phone')
+            .populate('subscription');
         res.status(200).json(companies);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -20,7 +22,8 @@ const getCompanies = async (req, res) => {
 const getCompanyById = async (req, res) => {
     try {
         const company = await Company.findById(req.params.id)
-            .populate('owner', 'name email phone');
+            .populate('owner', 'name email phone')
+            .populate('subscription');
 
         if (company && company.status !== 'Deleted') {
             res.status(200).json(company);
@@ -115,9 +118,53 @@ const deleteCompany = async (req, res) => {
     }
 };
 
+// @desc    Update company subscription (Super Admin only)
+// @route   PUT /api/companies/:id/subscription
+// @access  Private (Super Admin)
+const updateCompanySubscription = async (req, res) => {
+    try {
+        const { subscriptionId, duration } = req.body;
+        const company = await Company.findById(req.params.id);
+
+        if (!company || company.status === 'Deleted') {
+            return res.status(404).json({ message: 'Company not found' });
+        }
+
+        const subscription = await Subscription.findById(subscriptionId);
+        if (!subscription) {
+            return res.status(404).json({ message: 'Subscription plan not found' });
+        }
+
+        company.subscription = subscriptionId;
+        company.subscriptionStatus = 'Active';
+
+        // Calculate expiry date
+        const now = new Date();
+        if (duration === 'Yearly') {
+            now.setFullYear(now.getFullYear() + 1);
+        } else if (duration === 'Quarterly') {
+            now.setMonth(now.getMonth() + 3);
+        } else {
+            now.setMonth(now.getMonth() + 1);
+        }
+        company.subscriptionExpiresAt = now;
+
+        await company.save();
+        const updatedWithSub = await Company.findById(company._id).populate('subscription');
+
+        res.status(200).json({
+            message: 'Subscription assigned successfully',
+            company: updatedWithSub
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getCompanies,
     getCompanyById,
     updateCompany,
-    deleteCompany
+    deleteCompany,
+    updateCompanySubscription
 };

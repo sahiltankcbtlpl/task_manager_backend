@@ -13,6 +13,7 @@ const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
 const { uploadTask } = require('../middlewares/uploadMiddleware');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
 
 router.use(protect);
 router.use(checkCompanyAccess);
@@ -35,10 +36,10 @@ const uploadFields = uploadTask.fields([
 ]);
 
 router.route('/bulk-upload')
-    .post(checkPermission('tasks-create'), excelUpload.single('file'), bulkUploadTasks);
+    .post(checkPermission('tasks-create'), checkSubscriptionLimit('Bulk Upload'), excelUpload.single('file'), bulkUploadTasks);
 
 router.route('/')
-    .post(checkPermission('tasks-create'), uploadFields, createTask)
+    .post(checkPermission('tasks-create'), checkSubscriptionLimit('TaskOrIssue'), uploadFields, createTask)
     .get(getTasks); // Controller handles filtering based on user role/permissions
 
 router.route('/:id')

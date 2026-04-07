@@ -4,22 +4,26 @@ const {
     getCompanies,
     getCompanyById,
     updateCompany,
-    deleteCompany
+    deleteCompany,
+    updateCompanySubscription
 } = require('../controllers/companyController');
 const { protect } = require('../middlewares/auth');
+const { checkPermission } = require('../middlewares/role');
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
 const { uploadCompanyLogo } = require('../middlewares/uploadMiddleware');
 
-// Get all companies (Super Admin only - wait, does this exist? Just protect for now, controller handles auth)
-// Actually we can just use protect
+// Base protection
 router.use(protect);
 
 router.route('/')
     .get(getCompanies);
 
+router.route('/:id/subscription')
+    .put(updateCompanySubscription);
+
 router.route('/:id')
     .get(checkCompanyAccess, getCompanyById)
     .put(checkCompanyAccess, uploadCompanyLogo.single('logo'), updateCompany)
-    .delete(protect, deleteCompany);
+    .delete(deleteCompany);
 
 module.exports = router;

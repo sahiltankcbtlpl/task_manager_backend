@@ -13,13 +13,14 @@ const {
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
 
 router.use(protect);
 router.use(checkCompanyAccess);
 
 router
     .route('/')
-    .post(checkPermission('projects-create'), createProject)
+    .post(checkPermission('projects-create'), checkSubscriptionLimit('Projects'), createProject)
     .get(getProjects);
 
 router

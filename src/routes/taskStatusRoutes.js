@@ -9,13 +9,14 @@ const {
 } = require('../controllers/taskStatusController');
 const { protect } = require('../middlewares/auth');
 const { checkPermission } = require('../middlewares/role');
+const { checkSubscriptionLimit } = require('../middlewares/subscriptionMiddleware');
 
 const { checkCompanyAccess } = require('../middlewares/companyAuth');
 router.use(protect);
 router.use(checkCompanyAccess);
 
 router.route('/')
-    .post(checkPermission('task_status-create'), createTaskStatus)
+    .post(checkPermission('task_status-create'), checkSubscriptionLimit('Task Status'), createTaskStatus)
     .get(checkPermission('task_status-read'), getTaskstatus);
 
 router.route('/:id')
